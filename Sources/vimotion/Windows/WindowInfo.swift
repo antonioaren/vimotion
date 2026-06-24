@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A value type describing an on-screen window. Pure data, no system handles,

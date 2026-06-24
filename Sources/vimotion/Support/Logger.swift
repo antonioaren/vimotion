@@ -8,15 +8,18 @@ enum Log {
 
     static func debug(_ message: @autoclosure () -> String) {
         #if DEBUG
-        logger.debug("\(message(), privacy: .public)")
+        let msg = message()
+        logger.debug("\(msg, privacy: .public)")
         #endif
     }
 
     static func info(_ message: @autoclosure () -> String) {
-        logger.info("\(message(), privacy: .public)")
+        let msg = message()
+        logger.info("\(msg, privacy: .public)")
     }
 
     static func error(_ message: @autoclosure () -> String) {
-        logger.error("\(message(), privacy: .public)")
+        let msg = message()
+        logger.error("\(msg, privacy: .public)")
     }
 }

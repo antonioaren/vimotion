@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Pure, side-effect-free logic that picks the best window to focus when moving

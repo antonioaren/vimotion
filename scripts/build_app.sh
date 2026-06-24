@@ -29,6 +29,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
 cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
 cp "$ROOT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
+[[ -f "$ROOT_DIR/Resources/vimotion.icns" ]] && cp "$ROOT_DIR/Resources/vimotion.icns" "$RES_DIR/vimotion.icns"
 
 echo "▸ Ad-hoc code signing (keeps the Accessibility grant stable across rebuilds)…"
 codesign --force --deep --sign - "$APP_DIR"

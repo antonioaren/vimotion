@@ -21,6 +21,8 @@
     <!-- Background agent: no Dock icon, menu-bar only. -->
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>vimotion</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 antonioaren</string>
 </dict>

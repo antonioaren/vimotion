@@ -16,3 +16,15 @@ Package.resolved
 .vscode/
 .idea/
 *.swp
+
+# Scratch / temp
+__test_*
+*.tmp
+
+# Third-party agent/tooling caches (may leak local paths) — keep out of VCS
+.atl/
+.skill-registry*
+.pi/
+.claude/
+.cursor/
+.aider*
