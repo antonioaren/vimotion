@@ -2,8 +2,8 @@
 /// protocol rather than on Carbon directly. A future `CGEventTap`-based
 /// implementation (e.g. for multi-key sequences) can drop in here unchanged.
 public protocol HotkeyManaging: AnyObject {
-    /// Called on the main thread when a navigation hotkey fires.
-    var onDirection: ((Direction) -> Void)? { get set }
+    /// Called on the main thread when a hotkey fires.
+    var onAction: ((HotkeyAction) -> Void)? { get set }
 
     /// Whether the hotkeys are currently registered/active.
     var isActive: Bool { get }

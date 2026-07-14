@@ -5,7 +5,7 @@ import Foundation
 /// fixed modifier+key combinations and requires no extra entitlements.
 public final class CarbonHotkeyManager: HotkeyManaging {
 
-    public var onDirection: ((Direction) -> Void)?
+    public var onAction: ((HotkeyAction) -> Void)?
     public private(set) var isActive: Bool = false
 
     /// Four-char signature identifying our hotkeys.
@@ -13,8 +13,8 @@ public final class CarbonHotkeyManager: HotkeyManaging {
 
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
-    /// Maps a registered hotkey id to its direction.
-    private var directionByID: [UInt32: Direction] = [:]
+    /// Maps a registered hotkey id to its action.
+    private var actionByID: [UInt32: HotkeyAction] = [:]
 
     public init() {}
 
@@ -28,9 +28,9 @@ public final class CarbonHotkeyManager: HotkeyManaging {
         unregister()
         installEventHandlerIfNeeded()
 
-        for (index, shortcut) in Shortcut.navigation.enumerated() {
+        for (index, shortcut) in Shortcut.all.enumerated() {
             let id = UInt32(index)
-            var hotKeyID = EventHotKeyID(signature: signature, id: id)
+            let hotKeyID = EventHotKeyID(signature: signature, id: id)
             var ref: EventHotKeyRef?
             let status = RegisterEventHotKey(
                 shortcut.keyCode,
@@ -42,9 +42,9 @@ public final class CarbonHotkeyManager: HotkeyManaging {
             )
             if status == noErr, let ref {
                 hotKeyRefs.append(ref)
-                directionByID[id] = shortcut.direction
+                actionByID[id] = shortcut.action
             } else {
-                Log.error("Failed to register hotkey for \(shortcut.direction) (status \(status))")
+                Log.error("Failed to register hotkey for \(shortcut.action) (status \(status))")
             }
             _ = hotKeyID // silence unused warning on some toolchains
         }
@@ -58,7 +58,7 @@ public final class CarbonHotkeyManager: HotkeyManaging {
             UnregisterEventHotKey(ref)
         }
         hotKeyRefs.removeAll()
-        directionByID.removeAll()
+        actionByID.removeAll()
         isActive = false
     }
 
@@ -108,13 +108,13 @@ public final class CarbonHotkeyManager: HotkeyManaging {
         )
         guard status == noErr,
               hotKeyID.signature == signature,
-              let direction = directionByID[hotKeyID.id] else {
+              let action = actionByID[hotKeyID.id] else {
             return OSStatus(eventNotHandledErr)
         }
 
         // Hop to the main thread for AppKit-touching work.
         DispatchQueue.main.async { [weak self] in
-            self?.onDirection?(direction)
+            self?.onAction?(action)
         }
         return noErr
     }

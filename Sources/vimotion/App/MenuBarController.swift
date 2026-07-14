@@ -83,6 +83,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         hint.isEnabled = false
         menu.addItem(hint)
 
+        let toggleHint = NSMenuItem(title: "Last window: \(state.leader.displayName) + n", action: nil, keyEquivalent: "")
+        toggleHint.isEnabled = false
+        menu.addItem(toggleHint)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit vimotion", action: #selector(quit), keyEquivalent: "q")

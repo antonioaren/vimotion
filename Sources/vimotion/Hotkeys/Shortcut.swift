@@ -1,16 +1,24 @@
 import Carbon.HIToolbox
 
-/// Binding between a direction and the physical key that triggers it. The key
-/// codes are the fixed Vim navigation keys h/j/k/l.
+/// What a hotkey does when it fires: move focus in a direction or toggle back
+/// to the last visited window.
+public enum HotkeyAction: Sendable {
+    case navigate(Direction)
+    case toggleLastWindow
+}
+
+/// Binding between an action and the physical key that triggers it. The key
+/// codes are fixed: the Vim navigation keys h/j/k/l plus n for the toggle.
 public struct Shortcut: Sendable {
-    public let direction: Direction
+    public let action: HotkeyAction
     public let keyCode: UInt32
 
-    /// The four fixed navigation shortcuts (h/j/k/l → left/down/up/right).
-    public static let navigation: [Shortcut] = [
-        Shortcut(direction: .left, keyCode: UInt32(kVK_ANSI_H)),
-        Shortcut(direction: .down, keyCode: UInt32(kVK_ANSI_J)),
-        Shortcut(direction: .up, keyCode: UInt32(kVK_ANSI_K)),
-        Shortcut(direction: .right, keyCode: UInt32(kVK_ANSI_L)),
+    /// All fixed shortcuts (h/j/k/l → left/down/up/right, n → toggle).
+    public static let all: [Shortcut] = [
+        Shortcut(action: .navigate(.left), keyCode: UInt32(kVK_ANSI_H)),
+        Shortcut(action: .navigate(.down), keyCode: UInt32(kVK_ANSI_J)),
+        Shortcut(action: .navigate(.up), keyCode: UInt32(kVK_ANSI_K)),
+        Shortcut(action: .navigate(.right), keyCode: UInt32(kVK_ANSI_L)),
+        Shortcut(action: .toggleLastWindow, keyCode: UInt32(kVK_ANSI_N)),
     ]
 }
