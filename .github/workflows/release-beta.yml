@@ -1,0 +1,41 @@
+# Beta release: every push to a branch named beta/vX.Y.Z-dev publishes a
+# pre-release vX.Y.Z-beta.N that users on the Beta channel receive.
+name: Release (beta)
+
+on:
+  push:
+    branches:
+      - "beta/v*-dev"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ ! "$REF_NAME" =~ ^beta/v([0-9]+\.[0-9]+\.[0-9]+)-dev$ ]]; then
+            echo "::error::Branch $REF_NAME must be named beta/vX.Y.Z-dev"
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}-beta.$RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: version
+    permissions:
+      contents: write
+      pull-requests: write
+      models: read
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      prerelease: true
+    secrets: inherit
