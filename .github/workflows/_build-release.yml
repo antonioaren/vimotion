@@ -62,7 +62,7 @@ jobs:
       - name: Build app, zip and dmg
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          VIMOTION_SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: |
           ./scripts/build_app.sh
           ./scripts/make_dmg.sh

@@ -7,9 +7,8 @@
 #   ./scripts/build_app.sh
 #   VERSION=1.2.0-beta.3 BUILD_NUMBER=42 ./scripts/build_app.sh
 #
-# Signing: set SIGN_IDENTITY to a codesigning identity in the keychain to get a
-# stable signature (keeps the Accessibility grant across updates). Defaults to
-# ad-hoc ("-").
+# Signing: uses $VIMOTION_SIGN_IDENTITY, else a "vimotion-codesign" certificate,
+# else the first codesigning identity in the keychain, else ad-hoc (see README).
 #
 set -euo pipefail
 
@@ -25,7 +24,6 @@ ZIP_PATH="$DIST_DIR/$APP_NAME.zip"
 
 VERSION="${VERSION:-$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 1)}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
     echo "✗ VERSION '$VERSION' is not SemVer (X.Y.Z or X.Y.Z-pre)" >&2
@@ -52,12 +50,30 @@ cp "$ROOT_DIR/Resources/Info.plist" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PLIST"
 
-if [[ "$SIGN_IDENTITY" == "-" ]]; then
-    echo "▸ Ad-hoc code signing…"
-else
-    echo "▸ Code signing with '$SIGN_IDENTITY'…"
+# macOS ties the Accessibility grant to the app's code signature. An ad-hoc
+# signature ("-") is identified by the binary's hash, so every rebuild looks
+# like a new app and the existing grant silently stops applying. A real
+# identity (self-signed or Apple Development) keeps the grant across rebuilds.
+SIGN_IDENTITY="${VIMOTION_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]] && security find-certificate -c "vimotion-codesign" >/dev/null 2>&1; then
+    SIGN_IDENTITY="vimotion-codesign"
 fi
-codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' 'NF > 1 { print $2; exit }' || true)"
+fi
+
+if [[ -n "$SIGN_IDENTITY" ]]; then
+    echo "▸ Code signing with \"$SIGN_IDENTITY\" (keeps the Accessibility grant across rebuilds)…"
+    codesign --force --deep --identifier "$BUNDLE_ID" --sign "$SIGN_IDENTITY" "$APP_DIR"
+else
+    echo "▸ No signing identity found; falling back to ad-hoc signing…"
+    codesign --force --deep --identifier "$BUNDLE_ID" --sign - "$APP_DIR"
+    # The previous grant belongs to the old binary; drop it so macOS asks once,
+    # cleanly, instead of showing vimotion as enabled while denying access.
+    tccutil reset Accessibility "$BUNDLE_ID" >/dev/null 2>&1 || true
+    echo "  ⚠︎ Ad-hoc builds need Accessibility to be granted again after every rebuild."
+    echo "    Create a \"vimotion-codesign\" certificate to avoid this (see README)."
+fi
 
 echo "▸ Packaging update archive…"
 ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"

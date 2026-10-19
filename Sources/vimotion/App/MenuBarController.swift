@@ -5,6 +5,8 @@ public struct MenuState {
     public var enabled: Bool
     public var leader: LeaderKey
     public var trusted: Bool
+    /// One-line display summary (`DisplayLayout.summary`); empty hides the item.
+    public var displays: String
     /// `nil` for development builds.
     public var version: AppVersion?
     public var channel: UpdateChannel
@@ -14,16 +16,16 @@ public struct MenuState {
     public var isInstallingUpdate: Bool
 
     public static let fallback = MenuState(
-        enabled: false, leader: .default, trusted: true, version: nil, channel: .default,
+        enabled: false, leader: .default, trusted: true, displays: "", version: nil, channel: .default,
         automaticallyChecksForUpdates: true, pendingUpdate: nil,
         isCheckingForUpdates: false, isInstallingUpdate: false
     )
 }
 
 /// Owns the menu-bar status item and its menu: the installed version, Enable,
-/// Disable, a Leader Key submenu, an Updates submenu, and Quit. Purely
-/// presentational — it forwards user intent through closures and reflects state
-/// via `refresh`.
+/// Disable, a Leader Key submenu, the detected displays, an Updates submenu and
+/// Quit. Purely presentational — it forwards user intent through closures and
+/// reflects state via `refresh`.
 public final class MenuBarController: NSObject, NSMenuDelegate {
 
     public var onEnable: (() -> Void)?
@@ -130,6 +132,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         let toggleHint = NSMenuItem(title: "Last window: \(state.leader.displayName) + n", action: nil, keyEquivalent: "")
         toggleHint.isEnabled = false
         menu.addItem(toggleHint)
+
+        if !state.displays.isEmpty {
+            menu.addItem(.separator())
+            let displaysItem = NSMenuItem(title: state.displays, action: nil, keyEquivalent: "")
+            displaysItem.isEnabled = false
+            menu.addItem(displaysItem)
+        }
 
         menu.addItem(.separator())
 

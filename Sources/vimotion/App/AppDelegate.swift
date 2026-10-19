@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 enabled: self.coordinator.isEnabled,
                 leader: self.coordinator.leaderKey,
                 trusted: AccessibilityPermission.isTrusted,
+                displays: self.coordinator.layout.summary,
                 version: self.updater.currentVersion,
                 channel: self.updater.channel,
                 automaticallyChecksForUpdates: self.updater.automaticallyChecks,

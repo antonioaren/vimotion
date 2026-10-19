@@ -2,7 +2,7 @@
 
 Minimal macOS utility to move window focus with Vim-style keys — `Option + h/j/k/l` —
 without touching the mouse. No tiling, no resize, no virtual desktops. Just
-directional focus between windows on the active display.
+directional focus between windows, and between displays when you reach an edge.
 
 ## Why
 
@@ -23,8 +23,28 @@ The direction keys (`h/j/k/l`) are fixed. The **leader key** (`Option` by
 default) can be changed from the menu bar (Option / Command / Control /
 Control+Option) for anyone who'd rather not use Option.
 
-Navigation is restricted to the **active display** — the monitor that holds the
-currently focused app. It won't jump between monitors.
+Navigation first looks for a window on the **active display** — the monitor
+that holds the currently focused window.
+
+## Multiple displays
+
+vimotion reads the display arrangement you set in **System Settings ▸
+Displays** and refreshes it automatically whenever a monitor is connected,
+disconnected or rearranged. No extra configuration is needed.
+
+When there is no window left in the requested direction on the active display,
+vimotion jumps to the display adjacent in that direction. For example, with the
+laptop as the main display and an external monitor arranged right above it,
+`⌥ + k` from the topmost laptop window moves to:
+
+1. the **last window you focused** on the external monitor, or
+2. if there is none (or it was closed or moved away), the **frontmost window**
+   on that monitor.
+
+`⌥ + j` from there brings you back to the window you left on the laptop. The
+same applies to monitors arranged to the left, right or below. The menu bar
+shows the detected arrangement (e.g. `2 displays: Built-in Retina Display
+(primary), DELL U2720Q above`).
 
 ## Requirements
 
@@ -91,7 +111,8 @@ app in `dist/vimotion-<version>.dmg`. Then:
    login.
 
 The app lives in the menu bar with its version, **Enable**, **Disable**, a
-**Leader Key** submenu, an **Updates** submenu, and **Quit**.
+**Leader Key** submenu, the detected displays, an **Updates** submenu, and
+**Quit**.
 
 ## Develop & test
 
@@ -102,6 +123,28 @@ swift test           # run the unit tests (navigation, versions, updater)
 
 `swift run` builds have no bundle version, show up as *development build* and
 never update themselves.
+
+### Keeping the Accessibility permission across rebuilds
+
+macOS ties the Accessibility grant to the app's code signature. With an ad-hoc
+signature every rebuild counts as a new app: System Settings still lists
+vimotion as enabled, but the new build is denied and asks again.
+
+To avoid that, create a self-signed certificate once and `build_app.sh` will use
+it automatically:
+
+1. Open **Keychain Access ▸ Certificate Assistant ▸ Create a Certificate…**
+2. Name: `vimotion-codesign`, Identity Type: **Self Signed Root**,
+   Certificate Type: **Code Signing**. Create it in the **login** keychain.
+3. Rebuild with `./scripts/build_app.sh`. If macOS asks whether `codesign` may
+   use the key, choose **Always Allow**.
+4. Grant Accessibility one last time. Later rebuilds keep it.
+
+The script picks, in order: `$VIMOTION_SIGN_IDENTITY`, the `vimotion-codesign`
+certificate, the first valid signing identity in your keychain (e.g. an Apple
+Development certificate), and finally ad-hoc. With ad-hoc it resets the stale
+grant (`tccutil reset Accessibility com.antonioaren.vimotion`) so macOS asks
+cleanly once.
 
 ## Releasing
 
@@ -141,19 +184,18 @@ To preview the notes locally: `./scripts/release_notes.sh commits v1.1.0` or
 
 ### Signing
 
-macOS ties the Accessibility grant to the app's code signature. With the
-default ad-hoc signature every build looks like a new app, so users must
-re-grant Accessibility after each update. To avoid that, sign releases with a
-stable identity (a Developer ID, or a self-signed code-signing certificate
-created in Keychain Access ▸ Certificate Assistant):
+macOS ties the Accessibility grant to the app's code signature, so with ad-hoc
+signing users must re-grant Accessibility after each update (see
+[Keeping the Accessibility permission across rebuilds](#keeping-the-accessibility-permission-across-rebuilds)).
+To sign releases with a stable identity (a Developer ID, or the self-signed
+`vimotion-codesign` certificate):
 
 1. Export the certificate and its private key as a `.p12`.
 2. Add repository secrets `MACOS_CERT_P12` (`base64 -i cert.p12`) and
    `MACOS_CERT_PASSWORD`.
 
 The release workflow imports it and passes it to `build_app.sh` as
-`SIGN_IDENTITY`; without the secrets it falls back to ad-hoc signing. Locally:
-`SIGN_IDENTITY="My Cert" ./scripts/build_app.sh`.
+`VIMOTION_SIGN_IDENTITY`; without the secrets it falls back to ad-hoc signing.
 
 ## Architecture
 
@@ -167,20 +209,25 @@ Hotkey (Option+h/j/k/l)
           ├─ WindowEnumerating      → on-screen windows + focused window
           ├─ ScreenFiltering        → keep only the active display
           ├─ DirectionalNavigator   → pure: pick the target window
+          ├─ DisplayLayout          → pure: adjacent display when nothing is left
+          ├─ ScreenFocusMemory      → last focused window per display
           └─ WindowFocuser          → raise + activate the target
+
+ScreenChangeObserver (display connected / rearranged)
+   └─▶ AppCoordinator.reloadDisplays → rebuild DisplayLayout
 ```
 
 | Module | Responsibility |
 |--------|----------------|
-| `Navigation/` | `Direction`, `DirectionalNavigator` (pure selection logic) |
-| `Windows/` | enumerate windows, filter by display, focus a window |
+| `Navigation/` | `Direction`, `DirectionalNavigator`, `FocusHistory`, `ScreenFocusMemory` (pure logic) |
+| `Windows/` | enumerate windows, display layout and changes, filter by display, focus a window |
 | `Hotkeys/` | `LeaderKey`, `Shortcut`, Carbon-based global hotkeys |
 | `Permissions/` | Accessibility permission handling |
 | `Updates/` | `AppVersion` (SemVer), `UpdateSelector` (pure: what to offer per channel), GitHub release client, installer, update flow |
 | `App/` | coordinator, menu bar, preferences, lifecycle |
 
 Services sit behind protocols (`WindowEnumerating`, `HotkeyManaging`,
-`ScreenProviding`) so they can be mocked in tests or swapped later (e.g. a
+`ScreenProviding`, `ScreenChangeObserving`) so they can be mocked in tests or swapped later (e.g. a
 `CGEventTap` hotkey backend) without touching the core.
 
 See [PRD.md](PRD.md), [REQUIREMENTS.md](REQUIREMENTS.md) and [TASK.md](TASK.md)
