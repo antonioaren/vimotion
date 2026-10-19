@@ -40,19 +40,19 @@ final class UpdateControllerTests: XCTestCase {
     }
 
     func testAvailableUpdateIsPromptedAndInstalled() {
-        fetcher.result = .success([release("v1.1.0")])
+        fetcher.result = .success([makeRelease("v1.1.0")])
         prompter.choice = .install
         let controller = makeController()
 
         controller.checkForUpdates(userInitiated: true)
 
-        XCTAssertEqual(prompter.prompts, [.update(release("v1.1.0"))])
-        XCTAssertEqual(installer.installed, [release("v1.1.0")])
+        XCTAssertEqual(prompter.prompts, [.update(makeRelease("v1.1.0"))])
+        XCTAssertEqual(installer.installed, [makeRelease("v1.1.0")])
         XCTAssertEqual(preferences.lastUpdateCheck, clock)
     }
 
     func testLaterKeepsUpdatePendingForTheMenu() {
-        fetcher.result = .success([release("v1.1.0")])
+        fetcher.result = .success([makeRelease("v1.1.0")])
         let controller = makeController()
 
         controller.checkForUpdates(userInitiated: false)
@@ -62,11 +62,11 @@ final class UpdateControllerTests: XCTestCase {
 
         prompter.choice = .install
         controller.installPendingUpdate()
-        XCTAssertEqual(installer.installed, [release("v1.1.0")])
+        XCTAssertEqual(installer.installed, [makeRelease("v1.1.0")])
     }
 
     func testSkipIsRememberedForAutomaticChecksOnly() {
-        fetcher.result = .success([release("v1.1.0")])
+        fetcher.result = .success([makeRelease("v1.1.0")])
         prompter.choice = .skip
         let controller = makeController()
 
@@ -82,7 +82,7 @@ final class UpdateControllerTests: XCTestCase {
     }
 
     func testManualCheckWhenUpToDateSaysSo() {
-        fetcher.result = .success([release("v1.0.0")])
+        fetcher.result = .success([makeRelease("v1.0.0")])
         let controller = makeController()
 
         controller.checkForUpdates(userInitiated: false)
@@ -106,7 +106,7 @@ final class UpdateControllerTests: XCTestCase {
     }
 
     func testInstallFailureIsReported() {
-        fetcher.result = .success([release("v1.1.0")])
+        fetcher.result = .success([makeRelease("v1.1.0")])
         installer.result = .failure(TestError())
         prompter.choice = .install
         let controller = makeController()
@@ -148,7 +148,7 @@ final class UpdateControllerTests: XCTestCase {
     }
 
     func testJoiningBetaAsksForConfirmationThenChecks() {
-        fetcher.result = .success([release("v1.0.0"), release("v1.1.0-beta.2")])
+        fetcher.result = .success([makeRelease("v1.0.0"), makeRelease("v1.1.0-beta.2")])
         let controller = makeController()
 
         prompter.joinBeta = false
@@ -159,20 +159,20 @@ final class UpdateControllerTests: XCTestCase {
         prompter.joinBeta = true
         controller.setChannel(.beta)
         XCTAssertEqual(preferences.updateChannel, .beta)
-        XCTAssertEqual(prompter.prompts, [.update(release("v1.1.0-beta.2"))])
+        XCTAssertEqual(prompter.prompts, [.update(makeRelease("v1.1.0-beta.2"))])
     }
 
     func testLeavingBetaOffersLatestStableEvenIfOlder() {
         preferences.updateChannel = .beta
-        fetcher.result = .success([release("v1.0.0"), release("v1.1.0-beta.2")])
+        fetcher.result = .success([makeRelease("v1.0.0"), makeRelease("v1.1.0-beta.2")])
         prompter.choice = .install
         let controller = makeController(current: "1.1.0-beta.2")
 
         controller.setChannel(.stable)
 
         XCTAssertEqual(prompter.betaConfirmations, 0)
-        XCTAssertEqual(prompter.prompts, [.switchToStable(release("v1.0.0"))])
-        XCTAssertEqual(installer.installed, [release("v1.0.0")])
+        XCTAssertEqual(prompter.prompts, [.switchToStable(makeRelease("v1.0.0"))])
+        XCTAssertEqual(installer.installed, [makeRelease("v1.0.0")])
     }
 
     func testChangingChannelClearsSkippedVersion() {

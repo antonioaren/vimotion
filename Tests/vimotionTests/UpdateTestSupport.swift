@@ -1,7 +1,7 @@
 import Foundation
 @testable import vimotion
 
-func release(_ tag: String, prerelease: Bool? = nil, notes: String = "") -> Release {
+func makeRelease(_ tag: String, prerelease: Bool? = nil, notes: String = "") -> Release {
     let version = AppVersion(tag)!
     let base = URL(string: "https://example.com/\(tag)/")!
     return Release(

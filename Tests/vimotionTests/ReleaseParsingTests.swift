@@ -62,10 +62,10 @@ final class ReleaseParsingTests: XCTestCase {
         - feat: updater (abc123) — antonioaren
         """
 
-        XCTAssertEqual(release("v1.1.0", notes: notes).summary, "### New\n- You can now update from the menu bar.")
+        XCTAssertEqual(makeRelease("v1.1.0", notes: notes).summary, "### New\n- You can now update from the menu bar.")
     }
 
     func testSummaryFallsBackToWholeBody() {
-        XCTAssertEqual(release("v1.1.0", notes: "  Just a note.\n").summary, "Just a note.")
+        XCTAssertEqual(makeRelease("v1.1.0", notes: "  Just a note.\n").summary, "Just a note.")
     }
 }
