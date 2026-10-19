@@ -110,6 +110,7 @@ jobs:
           body_path: release-notes.md
           prerelease: ${{ inputs.prerelease }}
           make_latest: ${{ !inputs.prerelease }}
+          fail_on_unmatched_files: true
           files: |
             dist/vimotion-${{ env.VERSION }}.dmg
             dist/vimotion.zip

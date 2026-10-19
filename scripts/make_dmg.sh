@@ -21,13 +21,14 @@ fi
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_DIR/Contents/Info.plist")"
 DMG_PATH="$DIST_DIR/$APP_NAME-$VERSION.dmg"
 STAGING="$(mktemp -d)"
-trap 'rm -rf "$STAGING"' EXIT
+# Keep the script's exit status: bash 3.2 (macOS) otherwise reports the trap's.
+trap 'status=$?; rm -rf "$STAGING"; exit $status' EXIT
 
 echo "▸ Staging disk image contents…"
 ditto "$APP_DIR" "$STAGING/$APP_NAME.app"
 ln -s /Applications "$STAGING/Applications"
 
-echo "▸ Creating $DMG_PATH…"
+echo "▸ Creating ${DMG_PATH}…"
 rm -f "$DMG_PATH"
 hdiutil create \
     -volname "$APP_NAME $VERSION" \
