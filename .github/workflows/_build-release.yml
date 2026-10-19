@@ -1,0 +1,156 @@
+# Shared build + publish pipeline, called by release-stable.yml and
+# release-beta.yml. Builds the app, packages dmg/zip/sha256, writes the release
+# notes (AI summary with a commit-prefix fallback) and publishes the release.
+name: Build & publish release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: SemVer without the leading "v" (1.2.0 or 1.2.0-beta.7)
+        required: true
+        type: string
+      prerelease:
+        required: true
+        type: boolean
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      models: read
+    env:
+      VERSION: ${{ inputs.version }}
+      TAG: v${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test
+        run: swift test
+
+      - name: Import signing certificate
+        id: signing
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [[ -z "$MACOS_CERT_P12" ]]; then
+            echo "No MACOS_CERT_P12 secret; using ad-hoc signing."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' 'NR==1 {print $2}')"
+          if [[ -z "$IDENTITY" ]]; then
+            echo "::warning::No codesigning identity in MACOS_CERT_P12; using ad-hoc signing."
+            IDENTITY="-"
+          fi
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Build app, zip and dmg
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: |
+          ./scripts/build_app.sh
+          ./scripts/make_dmg.sh
+
+      - name: Collect changes since the previous release
+        id: changes
+        run: |
+          PREVIOUS="$(./scripts/release_notes.sh previous-tag "$TAG")"
+          echo "Previous release: ${PREVIOUS:-<none>}"
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          ./scripts/release_notes.sh ai-input "$PREVIOUS" > "$RUNNER_TEMP/ai-input.md"
+
+      - name: Summarize changes with AI
+        id: ai
+        continue-on-error: true
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o-mini
+          system-prompt-file: .github/prompts/release-summary.md
+          prompt-file: ${{ runner.temp }}/ai-input.md
+          max-tokens: 800
+
+      - name: Write release notes
+        env:
+          PREVIOUS: ${{ steps.changes.outputs.previous }}
+          AI_OUTCOME: ${{ steps.ai.outcome }}
+          AI_RESPONSE_FILE: ${{ steps.ai.outputs.response-file }}
+        run: |
+          SUMMARY="$RUNNER_TEMP/summary.md"
+          if [[ "$AI_OUTCOME" == "success" && -s "$AI_RESPONSE_FILE" ]]; then
+            cp "$AI_RESPONSE_FILE" "$SUMMARY"
+          else
+            echo "::warning::AI summary unavailable; falling back to commit prefixes."
+            ./scripts/release_notes.sh summary "$PREVIOUS" > "$SUMMARY"
+          fi
+          ./scripts/release_notes.sh body "$TAG" "$VERSION" "$PREVIOUS" "$SUMMARY" dist/vimotion.zip.sha256 > release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: vimotion ${{ env.TAG }}
+          body_path: release-notes.md
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: ${{ !inputs.prerelease }}
+          files: |
+            dist/vimotion-${{ env.VERSION }}.dmg
+            dist/vimotion.zip
+            dist/vimotion.zip.sha256
+
+      - name: Update CHANGELOG and docs/releases
+        if: ${{ !inputs.prerelease }}
+        run: |
+          mkdir -p docs/releases
+          {
+            echo "# vimotion $TAG"
+            echo
+            echo "_Released $(date -u +%Y-%m-%d)_"
+            echo
+            cat release-notes.md
+          } > "docs/releases/$TAG.md"
+
+          ENTRY="$RUNNER_TEMP/entry.md"
+          {
+            echo "## [$TAG](docs/releases/$TAG.md) — $(date -u +%Y-%m-%d)"
+            echo
+            sed -n '/^## What.s changed/,/^## Commits/{/^## /d;p;}' release-notes.md \
+              | sed -E 's/^### /#### /'
+          } > "$ENTRY"
+
+          if [[ -f CHANGELOG.md ]]; then
+            { head -n 2 CHANGELOG.md; cat "$ENTRY"; tail -n +3 CHANGELOG.md; } > "$RUNNER_TEMP/CHANGELOG.md"
+          else
+            { echo "# Changelog"; echo; cat "$ENTRY"; } > "$RUNNER_TEMP/CHANGELOG.md"
+          fi
+          mv "$RUNNER_TEMP/CHANGELOG.md" CHANGELOG.md
+
+      - name: Open changelog pull request
+        if: ${{ !inputs.prerelease }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: ${{ github.event.repository.default_branch }}
+          branch: release-notes/${{ env.TAG }}
+          commit-message: "docs: release notes for ${{ env.TAG }}"
+          title: "docs: release notes for ${{ env.TAG }}"
+          body: Automated changelog and release notes for [${{ env.TAG }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}).
+          add-paths: |
+            CHANGELOG.md
+            docs/releases/${{ env.TAG }}.md
