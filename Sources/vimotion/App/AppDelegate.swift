@@ -26,8 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func wireMenuBar() {
         menuBar.stateProvider = { [weak self] in
-            guard let self else { return (false, .default, true) }
-            return (self.coordinator.isEnabled, self.coordinator.leaderKey, AccessibilityPermission.isTrusted)
+            guard let self else { return (false, .default, true, "") }
+            return (
+                self.coordinator.isEnabled,
+                self.coordinator.leaderKey,
+                AccessibilityPermission.isTrusted,
+                self.coordinator.layout.summary
+            )
         }
         menuBar.onEnable = { [weak self] in self?.coordinator.enable() }
         menuBar.onDisable = { [weak self] in self?.coordinator.disable() }

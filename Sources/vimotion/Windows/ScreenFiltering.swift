@@ -3,10 +3,15 @@ import AppKit
 /// Supplies display geometry in the global, top-left-origin (CoreGraphics)
 /// coordinate space. Abstracted so the filtering logic can be unit-tested.
 public protocol ScreenProviding {
-    /// Frames of all displays, in top-left-origin coordinates.
-    var screenFramesCG: [CGRect] { get }
+    /// All connected displays, in top-left-origin coordinates.
+    var displays: [DisplayInfo] { get }
     /// Current mouse location, in top-left-origin coordinates.
     var mouseLocationCG: CGPoint { get }
+}
+
+public extension ScreenProviding {
+    /// Frames of all displays, in top-left-origin coordinates.
+    var screenFramesCG: [CGRect] { displays.map(\.frame) }
 }
 
 /// Default implementation backed by `NSScreen` / `NSEvent`, converting from
@@ -20,11 +25,18 @@ public struct NSScreenProvider: ScreenProviding {
         NSScreen.screens.first?.frame.height ?? 0
     }
 
-    public var screenFramesCG: [CGRect] {
+    public var displays: [DisplayInfo] {
         let h = primaryHeight
-        return NSScreen.screens.map { screen in
+        // `NSScreen.screens.first` is always the primary display.
+        return NSScreen.screens.enumerated().map { index, screen in
             let f = screen.frame
-            return CGRect(x: f.origin.x, y: h - f.origin.y - f.height, width: f.width, height: f.height)
+            let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            return DisplayInfo(
+                id: number?.uint32Value ?? CGDirectDisplayID(index),
+                frame: CGRect(x: f.origin.x, y: h - f.origin.y - f.height, width: f.width, height: f.height),
+                isPrimary: index == 0,
+                name: screen.localizedName
+            )
         }
     }
 
@@ -34,7 +46,7 @@ public struct NSScreenProvider: ScreenProviding {
     }
 }
 
-/// Restricts a set of windows to those on the "active" display, where the active
+/// Restricts a set of windows to those on a given display, where the "active"
 /// display is the one containing the focused window (or, as a fallback, the
 /// mouse cursor).
 public struct ScreenFiltering {
@@ -45,39 +57,32 @@ public struct ScreenFiltering {
         self.screens = screens
     }
 
+    /// Snapshot of the current display arrangement.
+    public func currentLayout() -> DisplayLayout {
+        DisplayLayout(displays: screens.displays)
+    }
+
+    /// The active display within `layout`, or `nil` if there are no displays.
+    public func activeDisplay(focused: WindowInfo?, in layout: DisplayLayout) -> DisplayInfo? {
+        layout.display(containing: focused?.center ?? screens.mouseLocationCG)
+    }
+
     /// Frame (top-left coords) of the active display, or `nil` if it can't be
     /// determined.
     public func activeScreenFrame(focused: WindowInfo?) -> CGRect? {
-        let frames = screens.screenFramesCG
-        guard !frames.isEmpty else { return nil }
+        activeDisplay(focused: focused, in: currentLayout())?.frame
+    }
 
-        let referencePoint = focused?.center ?? screens.mouseLocationCG
-        if let match = frames.first(where: { $0.contains(referencePoint) }) {
-            return match
-        }
-        // Fallback: the display whose center is nearest the reference point.
-        return frames.min(by: { lhs, rhs in
-            distance(from: center(of: lhs), to: referencePoint) <
-            distance(from: center(of: rhs), to: referencePoint)
-        })
+    /// Returns only the windows whose center lies on `display`, preserving
+    /// their order (front-to-back when coming from `WindowEnumerating`).
+    public func windows(_ windows: [WindowInfo], on display: DisplayInfo) -> [WindowInfo] {
+        windows.filter { display.frame.contains($0.center) }
     }
 
     /// Returns only the windows whose center lies on the active display. If the
     /// active display can't be determined, all windows are returned unchanged.
     public func windowsOnActiveScreen(_ windows: [WindowInfo], focused: WindowInfo?) -> [WindowInfo] {
-        guard let active = activeScreenFrame(focused: focused) else { return windows }
-        return windows.filter { active.contains($0.center) }
-    }
-
-    // MARK: - Helpers
-
-    private func center(of rect: CGRect) -> CGPoint {
-        CGPoint(x: rect.midX, y: rect.midY)
-    }
-
-    private func distance(from a: CGPoint, to b: CGPoint) -> CGFloat {
-        let dx = a.x - b.x
-        let dy = a.y - b.y
-        return (dx * dx + dy * dy).squareRoot()
+        guard let active = activeDisplay(focused: focused, in: currentLayout()) else { return windows }
+        return self.windows(windows, on: active)
     }
 }

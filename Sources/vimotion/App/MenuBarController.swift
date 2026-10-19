@@ -12,7 +12,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     public var onQuit: (() -> Void)?
 
     /// Snapshot the menu reads to draw checkmarks.
-    public var stateProvider: (() -> (enabled: Bool, leader: LeaderKey, trusted: Bool))?
+    public var stateProvider: (() -> (enabled: Bool, leader: LeaderKey, trusted: Bool, displays: String))?
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -46,7 +46,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     /// Rebuild the menu each time it opens so checkmarks reflect current state.
     public func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let state = stateProvider?() ?? (enabled: false, leader: .default, trusted: true)
+        let state = stateProvider?() ?? (enabled: false, leader: .default, trusted: true, displays: "")
 
         if !state.trusted {
             let warning = NSMenuItem(title: "⚠︎ Grant Accessibility access…", action: #selector(showPermissions), keyEquivalent: "")
@@ -86,6 +86,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         let toggleHint = NSMenuItem(title: "Last window: \(state.leader.displayName) + n", action: nil, keyEquivalent: "")
         toggleHint.isEnabled = false
         menu.addItem(toggleHint)
+
+        if !state.displays.isEmpty {
+            menu.addItem(.separator())
+            let displaysItem = NSMenuItem(title: state.displays, action: nil, keyEquivalent: "")
+            displaysItem.isEnabled = false
+            menu.addItem(displaysItem)
+        }
 
         menu.addItem(.separator())
 
