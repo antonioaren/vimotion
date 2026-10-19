@@ -57,6 +57,28 @@ swift build          # build
 swift test           # run the navigation unit tests
 ```
 
+### Keeping the Accessibility permission across rebuilds
+
+macOS ties the Accessibility grant to the app's code signature. With an ad-hoc
+signature every rebuild counts as a new app: System Settings still lists
+vimotion as enabled, but the new build is denied and asks again.
+
+To avoid that, create a self-signed certificate once and `build_app.sh` will use
+it automatically:
+
+1. Open **Keychain Access ▸ Certificate Assistant ▸ Create a Certificate…**
+2. Name: `vimotion-codesign`, Identity Type: **Self Signed Root**,
+   Certificate Type: **Code Signing**. Create it in the **login** keychain.
+3. Rebuild with `./scripts/build_app.sh`. If macOS asks whether `codesign` may
+   use the key, choose **Always Allow**.
+4. Grant Accessibility one last time. Later rebuilds keep it.
+
+The script picks, in order: `$VIMOTION_SIGN_IDENTITY`, the `vimotion-codesign`
+certificate, the first valid signing identity in your keychain (e.g. an Apple
+Development certificate), and finally ad-hoc. With ad-hoc it resets the stale
+grant (`tccutil reset Accessibility com.antonioaren.vimotion`) so macOS asks
+cleanly once.
+
 ## Architecture
 
 A thin coordinator wires together independent, protocol-backed pieces. The
