@@ -18,3 +18,4 @@ jobs:
         run: |
           VERSION=0.0.0-ci.${{ github.run_number }} ./scripts/build_app.sh
           ./scripts/make_dmg.sh
+          ls dist/vimotion.zip dist/vimotion.zip.sha256 dist/vimotion-0.0.0-ci.*.dmg
